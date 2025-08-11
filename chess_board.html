@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Chessboard Grid</title>
+  <style>
+    body {
+      font-family: monospace;
+      line-height: 1.4;
+      padding: 20px;
+    }
+    label {
+      /* keeps symbols visually separated */
+      display: inline-block;
+      width: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    // User story 1: print(data) - create a label and append it to the document body
+    function print(data) {
+      const lbl = document.createElement('label');
+      lbl.textContent = data;
+      document.body.appendChild(lbl);
+    }
+
+    // User story 2: newLine() - create and append a <br> to go to the next line
+    function newLine() {
+      const br = document.createElement('br');
+      document.body.appendChild(br);
+    }
+
+    // User story 3: declare board_size (width and height)
+    const board_size = 8; // change this to any positive integer
+
+    // User story 4: use above functions and variable to create a chessboard
+    // We'll place " * " on even (row+col) and "#" on odd (row+col).
+    for (let row = 0; row < board_size; row++) {
+      for (let col = 0; col < board_size; col++) {
+        const ch = ( (row + col) % 2 === 0 ) ? '*' : '#';
+        // print the symbol (with no extra line breaks) — label elements are inline-blocks
+        print(ch);
+      }
+      // after finishing a row, add a line break
+      newLine();
+    }
+
+    // Optional: add a small footer
+    newLine();
+    print('(board_size = ' + board_size + ')');
+  </script>
+</body>
+</html>
