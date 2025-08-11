@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Code Compiler</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="container">
+    <h1>Code Compiler</h1>
+
+    <label for="language">Select Language:</label>
+    <select id="language">
+        <option value="0">Python</option>
+        <option value="4">JavaScript</option>
+        <option value="7">C</option>
+        <option value="77">C++</option>
+        <option value="8">Java</option>
+    </select>
+
+    <label for="codeEditor">Write your code:</label>
+    <textarea id="codeEditor" placeholder="Write your code here..."></textarea>
+
+    <button id="compileBtn">Compile & Run</button>
+
+    <h2>Output Console:</h2>
+    <pre id="outputConsole"></pre>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
