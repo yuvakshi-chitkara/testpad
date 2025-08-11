@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Discussion App (D2)</title>
+<style>
+  :root{--accent:#007bff;--muted:#f4f6f8}
+  *{box-sizing:border-box}
+  body{font-family:Inter,system-ui,Arial,sans-serif;margin:0;height:100vh;display:flex;color:#111}
+  .left-pane{width:36%;border-right:1px solid #e3e6ea;padding:18px;background:var(--muted);overflow:auto}
+  .right-pane{flex:1;padding:18px;overflow:auto;background:#fff}
+  header{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .btn{background:var(--accent);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer}
+  .btn.secondary{background:#6c757d}
+  .search{flex:1;padding:8px;border-radius:6px;border:1px solid #d0d7de}
+  .question-list{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+  .q-card{background:#fff;padding:10px;border-radius:6px;border:1px solid #dfe6ee;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  .q-left{display:flex;gap:10px;align-items:center}
+  .q-title{font-weight:600}
+  .votes{display:flex;flex-direction:column;align-items:center;font-size:13px}
+  .vote-btn{background:transparent;border:1px solid #d0d7de;padding:4px;border-radius:4px;cursor:pointer;margin:2px}
+  .small{font-size:13px;color:#555}
+  form{display:flex;flex-direction:column;gap:8px;max-width:900px}
+  input[type="text"], textarea{padding:8px;border-radius:6px;border:1px solid #d0d7de;font-size:14px}
+  textarea{min-height:120px;resize:vertical}
+  .responses{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+  .response-card{padding:10px;border-radius:6px;border:1px solid #e6eef5;background:#fbfdff;display:flex;justify-content:space-between;gap:10px}
+  .meta{color:#666;font-size:13px}
+  .controls{display:flex;gap:8px;align-items:center}
+  .hint{color:#666;font-size:13px;margin-top:6px}
+  .empty{color:#666;padding:12px;background:#fff;border:1px dashed #dfe6ee;border-radius:6px}
+  .flex-row{display:flex;gap:8px;align-items:center}
+</style>
+</head>
+<body>
+
+  <div class="left-pane">
+    <header>
+      <button id="btnNewQuestion" class="btn">New Question</button>
+      <input id="searchInput" class="search" placeholder="Search questions by title or body..." />
+      <button id="clearSearch" class="btn secondary">Clear</button>
+    </header>
+
+    <div class="question-list" id="questionList">
+      <!-- Questions will be rendered here -->
+    </div>
+  </div>
+
+  <div class="right-pane" id="rightPane">
+    <!-- Right pane content (new question or question details) -->
+  </div>
+
+<script>
+/* ---------- Data handling (with localStorage) ---------- */
+const STORAGE_KEY = 'discussion_app_d2_v1';
+
+let state = {
+  questions: [] // each: {id, title, body, votes, timestamp, responses: [{id,name,comment,votes,timestamp}]}
+};
+
+// load saved if any
+const saved = localStorage.getItem(STORAGE_KEY);
+if (saved) {
+  try { state = JSON.parse(saved); } catch(e){ /* ignore */ }
+}
+
+function persist() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+/* ---------- Helpers ---------- */
+const el = id => document.getElementById(id);
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function sortByVotesThenTime(arr){
+  return arr.slice().sort((a,b)=>{
+    if (b.votes !== a.votes) return b.votes - a.votes;
+    return b.timestamp - a.timestamp;
+  });
+}
+
+/* ---------- Rendering left pane questions (with votes & up/down) ---------- */
+const questionListEl = el('questionList');
+
+function renderQuestionList(filter = '') {
+  questionListEl.innerHTML = '';
+  let list = state.questions;
+
+  if (filter) {
+    const qf = filter.toLowerCase();
+    list = list.filter(q => q.title.toLowerCase().includes(qf) || q.body.toLowerCase().includes(qf));
+  }
+
+  // sort by votes desc, then timestamp
+  list = sortByVotesThenTime(list);
+
+  if (list.length === 0) {
+    questionListEl.innerHTML = `<div class="empty">No questions yet${filter ? ' matching search' : ''}.</div>`;
+    return;
+  }
+
+  list.forEach(q => {
+    const card = document.createElement('div');
+    card.className = 'q-card';
+    card.dataset.id = q.id;
+
+    card.innerHTML = `
+      <div class="q-left">
+        <div class="votes">
+          <button class="vote-btn" data-action="q-up" title="Upvote">▲</button>
+          <div>${q.votes}</div>
+          <button class="vote-btn" data-action="q-down" title="Downvote">▼</button>
+        </div>
+        <div>
+          <div class="q-title">${escapeHtml(q.title)}</div>
+          <div class="small">${escapeHtml(q.body.slice(0,120))}${q.body.length>120?'...':''}</div>
+        </div>
+      </div>
+      <div class="small meta">${new Date(q.timestamp).toLocaleString()}</div>
+    `;
+
+    // clicking card (but not vote buttons) opens details
+    card.addEventListener('click', (ev)=>{
+      const action = ev.target.closest('[data-action]');
+      if (action) return; // vote click handled elsewhere
+      openQuestion(q.id);
+    });
+
+    // vote button handling (event delegation)
+    card.querySelector('[data-action="q-up"]').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      voteQuestion(q.id, +1);
+    });
+    card.querySelector('[data-action="q-down"]').addEventListener('click', (e)=>{
+      e.stopPropagation();
+      voteQuestion(q.id, -1);
+    });
+
+    questionListEl.appendChild(card);
+  });
+}
+
+/* ---------- Escape HTML to prevent injection while demoing ---------- */
+function escapeHtml(s){
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+}
+
+/* ---------- Right pane content ---------- */
+const rightPane = el('rightPane');
+
+function showNewQuestionForm() {
+  rightPane.innerHTML = `
+    <h2>Ask a Question</h2>
+    <form id="newQuestionForm">
+      <input id="titleInput" type="text" placeholder="Title (required)" required />
+      <textarea id="bodyInput" placeholder="Write your question here... (required)" required></textarea>
+      <div class="flex-row">
+        <button class="btn" type="submit">Submit Question</button>
+        <button type="button" id="cancelNew" class="btn secondary">Cancel</button>
+      </div>
+      <div class="hint">Title and question are mandatory.</div>
+    </form>
+  `;
+  const form = el('newQuestionForm');
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const title = el('titleInput').value.trim();
+    const body = el('bodyInput').value.trim();
+    if (!title || !body) return alert('Please fill Title and Question.');
+    createQuestion(title, body);
+    form.reset();
+  });
+  el('cancelNew').addEventListener('click', ()=> {
+    form.reset();
+  });
+}
+
+function openQuestion(qid) {
+  const q = state.questions.find(x => x.id===qid);
+  if (!q) return showNewQuestionForm();
+
+  // sort responses by votes desc
+  const responses = sortByVotesThenTime(q.responses || []);
+  rightPane.innerHTML = `
+    <h2>${escapeHtml(q.title)}</h2>
+    <div class="small meta">Posted: ${new Date(q.timestamp).toLocaleString()}</div>
+    <p style="white-space:pre-wrap;margin-top:10px">${escapeHtml(q.body)}</p>
+
+    <div style="margin-top:8px" class="flex-row">
+      <div class="votes" style="margin-right:8px">
+        <button class="vote-btn" id="qUp">▲</button>
+        <div id="qVotes">${q.votes}</div>
+        <button class="vote-btn" id="qDown">▼</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="small">Question votes</div>
+        <div>
+          <button id="resolveBtn" class="btn secondary">Resolve</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:16px">Responses (${responses.length})</h3>
+    <div id="responsesContainer" class="responses">
+      ${responses.map(r=>`
+        <div class="response-card" data-rid="${r.id}">
+          <div>
+            <div style="font-weight:600">${escapeHtml(r.name)}</div>
+            <div class="meta" style="margin-bottom:6px">${new Date(r.timestamp).toLocaleString()}</div>
+            <div style="white-space:pre-wrap">${escapeHtml(r.comment)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <button class="vote-btn" data-action="r-up" data-rid="${r.id}">▲</button>
+            <div class="small" id="rv-${r.id}">${r.votes}</div>
+            <button class="vote-btn" data-action="r-down" data-rid="${r.id}">▼</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <h4 style="margin-top:12px">Add a Response</h4>
+    <form id="responseForm">
+      <input id="resName" type="text" placeholder="Your name (required)" required />
+      <textarea id="resComment" placeholder="Your comment (required)" required></textarea>
+      <div class="flex-row">
+        <button class="btn" type="submit">Submit Response</button>
+        <button type="button" id="cancelResponse" class="btn secondary">Cancel</button>
+      </div>
+      <div class="hint">Both Name and Comment are mandatory.</div>
+    </form>
+  `;
+
+  // wire question vote handlers
+  el('qUp').addEventListener('click', ()=>voteQuestion(qid, +1));
+  el('qDown').addEventListener('click', ()=>voteQuestion(qid, -1));
+  el('resolveBtn').addEventListener('click', ()=>resolveQuestion(qid));
+
+  // wire response vote handlers by delegation
+  const responsesContainer = el('responsesContainer');
+  responsesContainer.querySelectorAll('[data-action="r-up"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>voteResponse(qid, btn.dataset.rid, +1));
+  });
+  responsesContainer.querySelectorAll('[data-action="r-down"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>voteResponse(qid, btn.dataset.rid, -1));
+  });
+
+  // response form
+  el('responseForm').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const name = el('resName').value.trim();
+    const comment = el('resComment').value.trim();
+    if (!name || !comment) return alert('Please fill Name and Comment.');
+    addResponse(qid, name, comment);
+    // re-open question to refresh UI
+    openQuestion(qid);
+  });
+  el('cancelResponse').addEventListener('click', ()=>{ el('responseForm').reset(); });
+}
+
+/* ---------- Actions (create, vote, add response, resolve) ---------- */
+function createQuestion(title, body){
+  const q = {
+    id: uid(),
+    title, body,
+    votes: 0,
+    timestamp: Date.now(),
+    responses: []
+  };
+  state.questions.push(q);
+  persist();
+  renderQuestionList(el('searchInput').value.trim());
+  openQuestion(q.id);
+}
+
+function voteQuestion(qid, delta){
+  const q = state.questions.find(x=>x.id===qid);
+  if (!q) return;
+  q.votes += delta;
+  persist();
+  renderQuestionList(el('searchInput').value.trim());
+  // if right pane showing this question, update votes there too
+  const qVotesEl = el('qVotes');
+  if (qVotesEl) qVotesEl.textContent = q.votes;
+}
+
+function addResponse(qid, name, comment){
+  const q = state.questions.find(x=>x.id===qid);
+  if (!q) return;
+  const r = { id: uid(), name, comment, votes: 0, timestamp: Date.now() };
+  q.responses.push(r);
+  persist();
+  renderQuestionList(el('searchInput').value.trim());
+}
+
+function voteResponse(qid, rid, delta){
+  const q = state.questions.find(x=>x.id===qid);
+  if (!q) return;
+  const r = q.responses.find(rr=>rr.id===rid);
+  if (!r) return;
+  r.votes += delta;
+  persist();
+
+  const rv = el('rv-' + rid);
+  if (rv) rv.textContent = r.votes;
+
+  renderQuestionList(el('searchInput').value.trim());
+  openQuestion(qid); 
+}
+
+function resolveQuestion(qid){
+  if (!confirm('Are you sure you want to resolve (delete) this question?')) return;
+  state.questions = state.questions.filter(q => q.id !== qid);
+  persist();
+  renderQuestionList(el('searchInput').value.trim());
+  showNewQuestionForm();
+}
+
+
+el('btnNewQuestion').addEventListener('click', ()=> {
+  showNewQuestionForm();
+});
+el('searchInput').addEventListener('input', (e)=>{
+  renderQuestionList(e.target.value.trim());
+});
+el('clearSearch').addEventListener('click', ()=>{
+  el('searchInput').value = '';
+  renderQuestionList('');
+});
+
+function ensureRightPane() {
+  if (!rightPane.innerHTML.trim()) showNewQuestionForm();
+}
+ensureRightPane();
+renderQuestionList('');
+
+
+window.__DIS_APP = { state, persist };
+</script>
+</body>
+</html>
