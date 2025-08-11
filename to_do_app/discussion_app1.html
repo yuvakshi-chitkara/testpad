@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Discussion Portal</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+    }
+    header {
+        background: teal;
+        padding: 10px;
+        color: white;
+        font-size: 24px;
+    }
+    #container {
+        display: flex;
+        height: calc(100vh - 50px);
+    }
+    #left-pane {
+        width: 30%;
+        border-right: 1px solid #ccc;
+        padding: 10px;
+        overflow-y: auto;
+    }
+    #right-pane {
+        flex: 1;
+        padding: 20px;
+    }
+    .question-box {
+        background: #f5f5f5;
+        padding: 10px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    .question-box:hover {
+        background: #e0e0e0;
+    }
+    input, textarea, button {
+        display: block;
+        margin-top: 10px;
+        padding: 8px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    button {
+        background: dodgerblue;
+        color: white;
+        border: none;
+        cursor: pointer;
+        width: auto;
+        padding: 8px 15px;
+    }
+    button:hover {
+        background: royalblue;
+    }
+    .response {
+        background: #f5f5f5;
+        padding: 8px;
+        margin-top: 5px;
+        border-radius: 4px;
+    }
+</style>
+</head>
+<body>
+
+<header>Discussion Portal</header>
+
+<div id="container">
+    <!-- Left Pane -->
+    <div id="left-pane">
+        <button id="newQuestionBtn">New Question form</button>
+        <input type="text" id="search" placeholder="search questions...">
+        <div id="question-list"></div>
+    </div>
+
+    <!-- Right Pane -->
+    <div id="right-pane">
+        <h2>Welcome to Discussion Portal !</h2>
+        <p>Enter a subject and question to get started</p>
+        <input type="text" id="question-title" placeholder="Subject" required>
+        <textarea id="question-text" placeholder="Question" rows="5" required></textarea>
+        <button id="submit-question">Submit</button>
+    </div>
+</div>
+
+<script>
+    let questions = [];
+
+    const leftPane = document.getElementById("question-list");
+    const rightPane = document.getElementById("right-pane");
+
+    document.getElementById("submit-question").addEventListener("click", () => {
+        const title = document.getElementById("question-title").value.trim();
+        const text = document.getElementById("question-text").value.trim();
+        if (!title || !text) {
+            alert("Both fields are mandatory!");
+            return;
+        }
+        const newQ = { title, text, responses: [] };
+        questions.push(newQ);
+        renderQuestions();
+        clearForm();
+    });
+
+    function clearForm() {
+        document.getElementById("question-title").value = "";
+        document.getElementById("question-text").value = "";
+    }
+
+    function renderQuestions() {
+        leftPane.innerHTML = "";
+        questions.forEach((q, index) => {
+            const div = document.createElement("div");
+            div.className = "question-box";
+            div.innerHTML = `<b>${q.title}</b><br>${q.text}`;
+            div.onclick = () => openQuestion(index);
+            leftPane.appendChild(div);
+        });
+    }
+
+    function openQuestion(index) {
+        const q = questions[index];
+        rightPane.innerHTML = `
+            <h3>Question</h3>
+            <div class="question-box"><b>${q.title}</b><br>${q.text}</div>
+            <button onclick="resolveQuestion(${index})">Resolve</button>
+            <h3>Response</h3>
+            <div id="responses">
+                ${q.responses.map(r => `<div class="response"><b>${r.name}</b><br>${r.comment}</div>`).join("")}
+            </div>
+            <h3>Add Response</h3>
+            <input type="text" id="res-name" placeholder="Enter Name" required>
+            <textarea id="res-comment" placeholder="Enter Comment" rows="3" required></textarea>
+            <button onclick="addResponse(${index})">Submit</button>
+        `;
+    }
+
+    window.addResponse = function(index) {
+        const name = document.getElementById("res-name").value.trim();
+        const comment = document.getElementById("res-comment").value.trim();
+        if (!name || !comment) {
+            alert("Both fields are mandatory!");
+            return;
+        }
+        questions[index].responses.push({ name, comment });
+        openQuestion(index);
+    }
+
+    window.resolveQuestion = function(index) {
+        questions.splice(index, 1);
+        renderQuestions();
+        showNewQuestionForm();
+    }
+
+    function showNewQuestionForm() {
+        rightPane.innerHTML = `
+            <h2>Welcome to Discussion Portal !</h2>
+            <p>Enter a subject and question to get started</p>
+            <input type="text" id="question-title" placeholder="Subject" required>
+            <textarea id="question-text" placeholder="Question" rows="5" required></textarea>
+            <button id="submit-question">Submit</button>
+        `;
+        document.getElementById("submit-question").addEventListener("click", () => {
+            const title = document.getElementById("question-title").value.trim();
+            const text = document.getElementById("question-text").value.trim();
+            if (!title || !text) {
+                alert("Both fields are mandatory!");
+                return;
+            }
+            const newQ = { title, text, responses: [] };
+            questions.push(newQ);
+            renderQuestions();
+            clearForm();
+        });
+    }
+
+    document.getElementById("newQuestionBtn").onclick = showNewQuestionForm;
+</script>
+
+</body>
+</html>
